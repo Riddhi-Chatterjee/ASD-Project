@@ -104,7 +104,7 @@ while cap.isOpened():
         cv2.imshow("Segmentation Result", seg_frame)
         
         # Break the loop if 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        if cv2.waitKey(10000) & 0xFF == ord("q"):
             break
     else:
         #Break the loop if the end of the video is reached
