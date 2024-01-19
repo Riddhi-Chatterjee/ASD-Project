@@ -59,6 +59,7 @@ while cap.isOpened():
         
         selected_masks = get_selected_masks((340, 180), masks)
         
+        mask_union = np.zeros((frame.shape[0],frame.shape[1]), dtype=np.uint8)
         if(len(selected_masks) != 0):
             mask_union = torch.clamp(sum(selected_masks), 0, 1)
             mask_union = mask_union.numpy()
