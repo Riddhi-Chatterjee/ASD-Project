@@ -1,5 +1,6 @@
 # import the required library
 import cv2
+import numpy as np
 
 # define a function to display the coordinates of
 
@@ -25,8 +26,11 @@ cv2.namedWindow('Point Coordinates')
 cv2.setMouseCallback('Point Coordinates', click_event)
 
 # display the image
+i=0
 while True:
-   cv2.imshow('Point Coordinates',img)
+   cv2.imshow('Point Coordinates',np.clip(img+i, 0, 255))
+   i += 1
+   i = i%256
    k = cv2.waitKey(1) & 0xFF
    if k == 27:
       break

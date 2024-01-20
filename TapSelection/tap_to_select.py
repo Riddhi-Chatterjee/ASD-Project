@@ -5,6 +5,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
+mouseX = 0
+mouseY = 0
+
+def click_event(event, x, y, flags, params):
+   if event == cv2.EVENT_LBUTTONDOWN:
+      print(f'({x},{y})')
+      global mouseX
+      global mouseY
+      mouseX = x
+      mouseY = y
+      
 
 def get_selected_masks(idx_pt, masks): #Returns a list of masks
     selected_masks = []
@@ -40,6 +51,11 @@ model = YOLO('yolov8s-seg.pt')
 video_path = "./objects-fixed-cam.mp4"
 cap = cv2.VideoCapture(video_path)
 
+# create a window
+cv2.namedWindow('Segmentation Result')
+# bind the callback function to window
+cv2.setMouseCallback('Segmentation Result', click_event)
+
 # Loop through the video frames
 while cap.isOpened():
     # Read a frame from the video
@@ -57,15 +73,21 @@ while cap.isOpened():
         
         masks = results[0].masks.data
         
-        selected_masks = get_selected_masks((340, 180), masks)
+        resized_masks = []
+        for mask in masks:
+            mask = mask.numpy()
+            mask = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
+            mask = np.clip(mask, a_min = 0, a_max = 1) 
+            resized_masks.append(mask)
+        
+        print("MouseX: "+str(mouseX))
+        print("MouseY: "+str(mouseY))
+        selected_masks = get_selected_masks((mouseY, mouseX), resized_masks)
         
         mask_union = np.zeros((frame.shape[0],frame.shape[1]), dtype=np.uint8)
         if(len(selected_masks) != 0):
-            mask_union = torch.clamp(sum(selected_masks), 0, 1)
-            mask_union = mask_union.numpy()
+            mask_union = np.clip(sum(selected_masks), a_min = 0, a_max = 1) 
             mask_union = (mask_union * 255).astype(np.uint8)
-            mask_union = cv2.resize(mask_union, (frame.shape[1], frame.shape[0]))
-            mask_union = np.clip(mask_union, a_min = 0, a_max = 255) 
             cv2.imshow("Selected Masks", mask_union)
         else:
             print("No object is selected!")
@@ -82,7 +104,7 @@ while cap.isOpened():
         cv2.imshow("Segmentation Result", seg_frame)
         
         # Break the loop if 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+        if cv2.waitKey(int(total_time*1000)) & 0xFF == ord("q"):
             break
     else:
         #Break the loop if the end of the video is reached
