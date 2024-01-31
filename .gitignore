@@ -161,3 +161,4 @@ cython_debug/
 
 TapSelection/yolov8s-seg.pt
 TapSelection/yolov8x-seg.pt
+TapSelection/media

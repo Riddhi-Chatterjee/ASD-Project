@@ -5,7 +5,7 @@ from ultralytics import YOLO
 model = YOLO('yolov8s-seg.pt')
 
 # Open the video file
-video_path = "./objects-brought-into-frame.mp4"
+video_path = "./objects-brought-into-frame-edited-version.mov"
 cap = cv2.VideoCapture(video_path)
 
 # Loop through the video frames

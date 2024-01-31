@@ -1,4 +1,4 @@
-# Incorporates object tracking... not implemented yet
+# Incorporates object tracking
 
 import cv2
 import time
@@ -6,29 +6,61 @@ from ultralytics import YOLO
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import sys
+import signal
 
-mouseX = 0
-mouseY = 0
+def signal_handler(sig, frame):
+    print('\nExiting...')
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+
+mouseX = None
+mouseY = None
+new_click = False
+selected_id = None
 
 def click_event(event, x, y, flags, params):
    if event == cv2.EVENT_LBUTTONDOWN:
       print(f'({x},{y})')
       global mouseX
       global mouseY
+      global new_click
       mouseX = x
       mouseY = y
+      new_click = True
       
 
-def get_selected_masks(idx_pt, masks): #Returns a list of masks
-    selected_masks = []
-    for mask in masks:
-        if mask[idx_pt[0]][idx_pt[1]] != 0:
-            selected_masks.append(mask)
-    return selected_masks
+def get_selected_mask(idx_pt, masks, results): #Returns a list of masks
+    global selected_id
+    global new_click
+    selected_mask = None
+    
+    if new_click:
+        new_click = False
+        index = 0
+        for mask in masks:
+            if mask[idx_pt[0]][idx_pt[1]] != 0:
+                selected_mask = mask
+                break
+            index += 1
+        
+        if index < len(masks):
+            selected_id = results[0].boxes.id[index].item()
+        else:
+            selected_id = None
+    else:
+        if selected_id:
+            index = (results[0].boxes.id == selected_id).nonzero(as_tuple=True)[0]
+            if len(index) != 0:
+                selected_mask = masks[index[0].item()]
+    
+    return selected_mask
+        
 
 
 def highlight_mask(image, mask):
-    
     # Create a copy of the original image
     highlighted_image = image.copy()
 
@@ -50,7 +82,7 @@ if torch.cuda.is_available():
 model = YOLO('yolov8s-seg.pt')
 
 # Open the video file
-video_path = "./objects-fixed-cam.mp4"
+video_path = "./objects-moving-cam.mp4"
 cap = cv2.VideoCapture(video_path)
 
 # create a window
@@ -65,9 +97,9 @@ while cap.isOpened():
     
     if success:
         start = time.perf_counter()
-        
+
         # Run YOLOv8 inference on the frame
-        results = model(frame)
+        results = model.track(frame, persist=True)
         
         end = time.perf_counter()
         total_time = end - start
@@ -84,14 +116,14 @@ while cap.isOpened():
         
         print("MouseX: "+str(mouseX))
         print("MouseY: "+str(mouseY))
-        selected_masks = get_selected_masks((mouseY, mouseX), resized_masks)
+        selected_mask = get_selected_mask((mouseY, mouseX), resized_masks, results)
         
-        mask_union = np.zeros((frame.shape[0],frame.shape[1]), dtype=np.uint8)
-        if(len(selected_masks) != 0):
-            mask_union = np.clip(sum(selected_masks), a_min = 0, a_max = 1) 
-            mask_union = (mask_union * 255).astype(np.uint8)
-            cv2.imshow("Selected Masks", mask_union)
+        if type(selected_mask) != type(None):
+            selected_mask = np.clip(selected_mask, a_min = 0, a_max = 1) 
+            selected_mask = (selected_mask * 255).astype(np.uint8)
+            cv2.imshow("Selected Mask", selected_mask)
         else:
+            selected_mask = np.zeros((frame.shape[0],frame.shape[1]), dtype=np.uint8)
             print("No object is selected!")
         
         # # Visualize the results on the frame
@@ -101,7 +133,7 @@ while cap.isOpened():
         # cv2.putText(img = annotated_frame, text = f"FPS: {int(fps)}", org = (50, 50), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 2, color = (0, 0, 255), thickness = 4, lineType = cv2.LINE_AA)
         # cv2.imshow("YOLOv8 Inference", annotated_frame)
         
-        seg_frame = highlight_mask(frame, mask_union)
+        seg_frame = highlight_mask(frame, selected_mask)
         cv2.putText(img = seg_frame, text = f"FPS: {int(fps)}", org = (50, 50), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 2, color = (0, 0, 255), thickness = 4, lineType = cv2.LINE_AA)
         cv2.imshow("Segmentation Result", seg_frame)
         
