@@ -1,5 +1,4 @@
 # Incorporates object tracking
-# Incorporates image similarity checks... not implemented yet
 
 import cv2
 import time
@@ -9,20 +8,6 @@ import numpy as np
 import torch
 import sys
 import signal
-from image_similarity_v2 import image_comparator
-
-'''
-<Generic image comparator class>
-
-class image_comparator:
-    def __init__(self):
-        self.threshold = (some int)
-    def dissimilarity(self, image1, image2):
-        return value of dissimilarity metric
-    def is_same(self, image1, image2):
-        dis = self.dissimilarity(image1, image2)
-        return (dis <= self.threshold, dis)
-'''
 
 def signal_handler(sig, frame):
     print('\nExiting...')
@@ -35,28 +20,6 @@ mouseX = None
 mouseY = None
 new_click = False
 selected_id = None
-selected_object_hidden = False
-selected_object_crop = None
-max_id = -1
-candidates = []
-ic = image_comparator()
-
-
-def get_crop(frame, masks, results, index):
-    remove_background = True
-    
-    mask = masks[index]
-    
-    bbox = results[0].boxes.xyxy[index].cpu().numpy()
-    bbox = bbox.astype(int)
-    
-    image = frame.copy()
-    if remove_background:
-        image[mask == 0] = [0, 0, 0]
-    image = image[bbox[1]:bbox[3], bbox[0]:bbox[2]]
-    
-    return image
-        
 
 def click_event(event, x, y, flags, params):
    if event == cv2.EVENT_LBUTTONDOWN:
@@ -69,12 +32,9 @@ def click_event(event, x, y, flags, params):
       new_click = True
       
 
-def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
+def get_selected_mask(idx_pt, masks, results): #Returns a list of masks
     global selected_id
     global new_click
-    global selected_object_crop
-    global candidates
-    global selected_object_hidden
     selected_mask = None
     
     if new_click:
@@ -88,15 +48,8 @@ def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
         
         if index < len(masks):
             selected_id = results[0].boxes.id[index].item()
-            selected_object_crop = get_crop(frame, masks, results, index)
-            candidates = []
-            candidates.append((selected_id, 0))
-            selected_object_hidden = False
         else:
             selected_id = None
-            selected_object_crop = None
-            candidates = []
-            selected_object_hidden = False
     else:
         if selected_id != None:
             index = (results[0].boxes.id == selected_id).nonzero(as_tuple=True)[0]
@@ -105,6 +58,7 @@ def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
     
     return selected_mask
         
+
 
 def highlight_mask(image, mask):
     # Create a copy of the original image
@@ -147,6 +101,9 @@ while cap.isOpened():
         # Run YOLOv8 inference on the frame
         results = model.track(frame, persist=True)
         
+        print(results[0].boxes)
+        
+        
         end = time.perf_counter()
         total_time = end - start
         fps = 1/total_time
@@ -162,30 +119,17 @@ while cap.isOpened():
         
         print("MouseX: "+str(mouseX))
         print("MouseY: "+str(mouseY))
+        selected_mask = get_selected_mask((mouseY, mouseX), resized_masks, results)
         
-        if selected_id != None and selected_id not in results[0].boxes.id: #Selected object just got hidden
-            selected_object_hidden = True
-        if selected_object_hidden: #Selected object might still be hidden... search for better candidates
-            if not (results[0].boxes.id<=max_id).all().item(): #At least one new object is detected
-                for i, id in enumerate(results[0].boxes.id):
-                    id = id.item()
-                    if id > max_id: #Getting ids of all the newly obtained objects
-                        comparison_info = ic.is_same(get_crop(frame, resized_masks, results, i), selected_object_crop)
-                        print("Comparison Info: "+str(comparison_info))
-                        if comparison_info[0]:
-                            candidates.append((id, comparison_info[1]))
-                if len(candidates) != 0:
-                    visible_candidates = []
-                    for candidate in candidates:
-                        if candidate[0] in results[0].boxes.id:
-                            visible_candidates.append(candidate)
-                    if len(visible_candidates) != 0:
-                        best_visible_candidate = min(visible_candidates, key=lambda x: x[1])
-                        selected_id = best_visible_candidate[0]
-                    
-        max_id = max(results[0].boxes.id).item()
-        
-        selected_mask = get_selected_mask((mouseY, mouseX), resized_masks, results, frame)
+        ########################################
+        if selected_id is not None:
+            index = (results[0].boxes.id == selected_id).nonzero(as_tuple=True)[0]
+            if len(index) != 0:
+                bbox = results[0].boxes.xyxy[index[0].item()].cpu().numpy()
+                bbox = bbox.astype(int)
+                cropped_object = frame[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                cv2.imshow("Cropped Object", cropped_object)
+        #########################################
         
         if type(selected_mask) != type(None):
             selected_mask = np.clip(selected_mask, a_min = 0, a_max = 1) 

@@ -51,7 +51,7 @@ def get_selected_mask(idx_pt, masks, results): #Returns a list of masks
         else:
             selected_id = None
     else:
-        if selected_id:
+        if selected_id != None:
             index = (results[0].boxes.id == selected_id).nonzero(as_tuple=True)[0]
             if len(index) != 0:
                 selected_mask = masks[index[0].item()]
