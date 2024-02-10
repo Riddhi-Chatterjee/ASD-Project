@@ -6,7 +6,7 @@ import numpy as np
 class image_comparator:
     
     def __init__(self):
-        self.threshold = 25000
+        self.threshold = 15000
         
     def compute_pdq_hash(self, image):
         #hash_vector, quality = pdqhash.compute(image)

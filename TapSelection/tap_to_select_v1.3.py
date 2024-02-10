@@ -1,5 +1,6 @@
 # Incorporates object tracking
 # Incorporates brute force image similarity checks
+# Optimizes image similarity checks... not implemented yet
 
 import cv2
 import time
