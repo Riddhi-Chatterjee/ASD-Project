@@ -7,9 +7,13 @@ import cv2
 class image_comparator_v1:
     
     def __init__(self):
+        self.device = "cpu"
+        if torch.cuda.is_available():
+            self.device = "cuda"
         self.threshold = 25
         # Load the pretrained model
         self.model = torch.hub.load('facebookresearch/semi-supervised-ImageNet1K-models', 'resnext101_32x16d_swsl')
+        self.model = self.model.to(self.device)
         # Set the model to evaluation mode
         self.model.eval()
         
