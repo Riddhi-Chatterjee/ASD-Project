@@ -24,7 +24,7 @@ class image_comparator_v1:
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        return transform(image).unsqueeze(0)
+        return transform(image).unsqueeze(0).to(self.device)
         
     def dissimilarity(self, image1, image2): #image1 and image2 must be OpenCV/numpy images
         #Convert OpenCV/numpy images to PIL images
