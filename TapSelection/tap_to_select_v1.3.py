@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import sys
 import signal
-from image_similarity_v2 import image_comparator
+from image_similarity_pdq import image_comparator_pdq as image_comparator
 
 '''
 <Generic image comparator class>
@@ -157,16 +157,12 @@ while cap.isOpened():
     success, frame = cap.read()
     
     if success:
+        start = time.perf_counter()
+        
         candidates = clean_candidates(candidates)
         
-        start = time.perf_counter()
-
         # Run YOLOv8 inference on the frame
         results = model.track(frame, persist=True)
-        
-        end = time.perf_counter()
-        total_time = end - start
-        fps = 1/total_time
         
         masks = results[0].masks.data
         
@@ -275,6 +271,9 @@ while cap.isOpened():
         # cv2.imshow("YOLOv8 Inference", annotated_frame)
         
         seg_frame = highlight_mask(frame, selected_mask)
+        end = time.perf_counter()
+        total_time = end - start
+        fps = 1/total_time
         cv2.putText(img = seg_frame, text = f"FPS: {int(fps)}", org = (50, 50), fontFace = cv2.FONT_HERSHEY_SIMPLEX, fontScale = 2, color = (0, 0, 255), thickness = 4, lineType = cv2.LINE_AA)
         cv2.imshow("Segmentation Result", seg_frame)
         

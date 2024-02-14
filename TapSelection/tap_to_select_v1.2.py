@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import sys
 import signal
-from image_similarity_v2 import image_comparator
+from image_similarity_pdq import image_comparator_pdq as image_comparator
 
 '''
 <Generic image comparator class>

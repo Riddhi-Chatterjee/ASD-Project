@@ -3,7 +3,7 @@ import cv2
 import os
 import numpy as np
 
-class image_comparator:
+class image_comparator_pdq:
     
     def __init__(self):
         self.threshold = 15000
@@ -51,5 +51,5 @@ if __name__ == "__main__":
     image2 = cv2.imread("./media/oc_3.jpg")
     #image2 = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
     
-    ic = image_comparator()
+    ic = image_comparator_pdq()
     print(ic.is_same(image1, image2))
