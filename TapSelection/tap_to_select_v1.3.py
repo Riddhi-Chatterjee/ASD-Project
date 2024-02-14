@@ -1,6 +1,6 @@
 # Incorporates object tracking
 # Incorporates brute force image similarity checks
-# Optimizes image similarity checks... not implemented yet
+# Optimizes image similarity checks
 
 import cv2
 import time
@@ -38,9 +38,23 @@ new_click = False
 selected_id = None
 selected_object_hidden = False
 selected_object_crop = None
-max_id = -1
-candidates = []
+prev_ids = set()
+prev_xywh = {}
+candidates = set()
 ic = image_comparator()
+
+
+def clean_candidates(candidates):
+    unique_candidates = {}
+    
+    for candidate in candidates:
+        current_id, current_distance = candidate
+
+        # Check if id is not in the dictionary or the current distance is smaller
+        if current_id not in unique_candidates or current_distance < unique_candidates[current_id][1]:
+            unique_candidates[current_id] = (current_id, current_distance)
+
+    return set(unique_candidates.values())
 
 
 def get_crop(frame, masks, results, index):
@@ -90,13 +104,13 @@ def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
         if index < len(masks):
             selected_id = results[0].boxes.id[index].item()
             selected_object_crop = get_crop(frame, masks, results, index)
-            candidates = []
-            candidates.append((selected_id, 0))
+            candidates = set()
+            candidates.add((selected_id, 0))
             selected_object_hidden = False
         else:
             selected_id = None
             selected_object_crop = None
-            candidates = []
+            candidates = set()
             selected_object_hidden = False
     else:
         if selected_id != None:
@@ -143,6 +157,8 @@ while cap.isOpened():
     success, frame = cap.read()
     
     if success:
+        candidates = clean_candidates(candidates)
+        
         start = time.perf_counter()
 
         # Run YOLOv8 inference on the frame
@@ -164,27 +180,82 @@ while cap.isOpened():
         print("MouseX: "+str(mouseX))
         print("MouseY: "+str(mouseY))
         
-        if selected_id != None and selected_id not in results[0].boxes.id: #Selected object just got hidden
+        current_xywh = {}
+        skip_xywh_update = {}
+        for i, id in enumerate(results[0].boxes.id):
+            id = id.item()
+            bbox = results[0].boxes.xyxy[i].cpu().numpy()
+            current_xywh[id] = (bbox[0], bbox[1], (bbox[2] - bbox[0]), (bbox[3] - bbox[1]))
+            skip_xywh_update[id] = False
+        
+        current_ids = set(results[0].boxes.id.tolist())
+        
+        if selected_id != None and selected_id not in current_ids: #Selected object just got hidden
             selected_object_hidden = True
         if selected_object_hidden: #Selected object might still be hidden... search for better candidates
-            if True or not (results[0].boxes.id<=max_id).all().item(): #At least one new object is detected
+            best_visible_candidate = None
+            new_ids = current_ids - prev_ids
+            if new_ids: #At least one new object is detected
+                id_to_index = {}
                 for i, id in enumerate(results[0].boxes.id):
                     id = id.item()
-                    if True or id > max_id: #Getting ids of all the newly obtained objects
-                        comparison_info = ic.is_same(get_crop(frame, resized_masks, results, i), selected_object_crop)
-                        print("Comparison Info: "+str(comparison_info))
-                        if comparison_info[0]:
-                            candidates.append((id, comparison_info[1]))
+                    id_to_index[id] = i
+                for id in new_ids:
+                    comparison_info = ic.is_same(get_crop(frame, resized_masks, results, id_to_index[id]), selected_object_crop)
+                    print("Comparison Info: "+str(comparison_info))
+                    if comparison_info[0]:
+                        candidates.add((id, comparison_info[1]))
                 if len(candidates) != 0:
                     visible_candidates = []
+                    visibility = {}
                     for candidate in candidates:
-                        if candidate[0] in results[0].boxes.id:
+                        visibility[candidate[0]] = False
+                    for id in results[0].boxes.id:
+                        id = id.item()
+                        visibility[id] = True
+                    for candidate in candidates:
+                        if visibility[candidate[0]]:
                             visible_candidates.append(candidate)
                     if len(visible_candidates) != 0:
                         best_visible_candidate = min(visible_candidates, key=lambda x: x[1])
                         selected_id = best_visible_candidate[0]
-                    
-        max_id = max(results[0].boxes.id).item()
+            
+            #Also check for old visible objects which have changed position or shape
+            #position_threshold = 1
+            lin_dimension_threshold = 20
+            is_new_id = {}
+            for id in current_ids:
+                is_new_id[id] = False
+            for id in new_ids:
+                is_new_id[id] = True
+            for i, id in enumerate(results[0].boxes.id):
+                id = id.item()
+                if not is_new_id[id]:
+                    #change_x = abs(current_xywh[id][0] - prev_xywh[id][0])
+                    #change_y = abs(current_xywh[id][1] - prev_xywh[id][1])
+                    change_w = abs(current_xywh[id][2] - prev_xywh[id][2])
+                    change_h = abs(current_xywh[id][3] - prev_xywh[id][3])
+                    #if (change_x > position_threshold) or (change_y > position_threshold) or (change_w > lin_dimension_threshold) or (change_h > lin_dimension_threshold):
+                    if (change_w > lin_dimension_threshold) or (change_h > lin_dimension_threshold):
+                        #Some computation... compare with best_visible_candidate... set selected id at the end      
+                        comparison_info = ic.is_same(get_crop(frame, resized_masks, results, i), selected_object_crop)
+                        print("Comparison Info: "+str(comparison_info))
+                        if comparison_info[0]:
+                            candidates.add((id, comparison_info[1]))
+                            if best_visible_candidate != None:
+                                if comparison_info[1] < best_visible_candidate[1]:
+                                    best_visible_candidate = (id, comparison_info[1])
+                                    selected_id = best_visible_candidate[0]
+                            else:
+                                best_visible_candidate = (id, comparison_info[1])
+                                selected_id = best_visible_candidate[0]
+                    else:
+                        skip_xywh_update[id] = True
+                      
+        prev_ids = current_ids
+        for key in current_xywh.keys():
+            if not skip_xywh_update[key]:
+                prev_xywh[key] = current_xywh[key]
         
         selected_mask = get_selected_mask((mouseY, mouseX), resized_masks, results, frame)
         
