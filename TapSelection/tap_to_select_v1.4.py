@@ -1,6 +1,7 @@
 # Incorporates object tracking
 # Incorporates brute force image similarity checks
 # Optimizes image similarity checks
+# Takes into account dynamic changes to the selected object's crop... not implemented yet
 
 import cv2
 import time
@@ -37,12 +38,21 @@ mouseY = None
 new_click = False
 selected_id = None
 selected_object_hidden = False
-selected_object_crop = None
+selected_object_crops = []
 prev_ids = set()
 prev_xywh = {}
 candidates = set()
 ic = image_comparator()
 
+def is_same(object_crop, selected_object_crops, ic):
+    pass
+
+def addSOC(selected_object_crops, selected_object_crop):
+    index = 0
+    while index < len(selected_object_crops) and ((selected_object_crop.shape[0] * selected_object_crop.shape[1]) > (selected_object_crops[index].shape[0] * selected_object_crops[index].shape[1])):
+        index += 1
+    selected_object_crops.insert(index, selected_object_crop)
+    return selected_object_crops
 
 def clean_candidates(candidates):
     unique_candidates = {}
@@ -87,7 +97,7 @@ def click_event(event, x, y, flags, params):
 def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
     global selected_id
     global new_click
-    global selected_object_crop
+    global selected_object_crops
     global candidates
     global selected_object_hidden
     selected_mask = None
@@ -103,13 +113,15 @@ def get_selected_mask(idx_pt, masks, results, frame): #Returns a list of masks
         
         if index < len(masks):
             selected_id = results[0].boxes.id[index].item()
-            selected_object_crop = get_crop(frame, masks, results, index)
+            new_selected_object_crop = get_crop(frame, masks, results, index)
+            if not is_same(new_selected_object_crop, selected_object_crops, ic):
+                selected_object_crops = []
+            selected_object_crops = addSOC(selected_object_crops, new_selected_object_crop)
             candidates = set()
             candidates.add((selected_id, 0))
             selected_object_hidden = False
         else:
             selected_id = None
-            selected_object_crop = None
             candidates = set()
             selected_object_hidden = False
     else:
@@ -186,18 +198,19 @@ while cap.isOpened():
         
         current_ids = set(results[0].boxes.id.tolist())
         
+        id_to_index = {}
+        for i, id in enumerate(results[0].boxes.id):
+            id = id.item()
+            id_to_index[id] = i
+        
         if selected_id != None and selected_id not in current_ids: #Selected object just got hidden
             selected_object_hidden = True
         if selected_object_hidden: #Selected object might still be hidden... search for better candidates
             best_visible_candidate = None
             new_ids = current_ids - prev_ids
             if new_ids: #At least one new object is detected
-                id_to_index = {}
-                for i, id in enumerate(results[0].boxes.id):
-                    id = id.item()
-                    id_to_index[id] = i
                 for id in new_ids:
-                    comparison_info = ic.is_same(get_crop(frame, resized_masks, results, id_to_index[id]), selected_object_crop)
+                    comparison_info = is_same(get_crop(frame, resized_masks, results, id_to_index[id]), selected_object_crops, ic)
                     print("Comparison Info: "+str(comparison_info))
                     if comparison_info[0]:
                         candidates.add((id, comparison_info[1]))
@@ -234,7 +247,7 @@ while cap.isOpened():
                     #if (change_x > position_threshold) or (change_y > position_threshold) or (change_w > lin_dimension_threshold) or (change_h > lin_dimension_threshold):
                     if (change_w > lin_dimension_threshold) or (change_h > lin_dimension_threshold):
                         #Some computation... compare with best_visible_candidate... set selected id at the end      
-                        comparison_info = ic.is_same(get_crop(frame, resized_masks, results, i), selected_object_crop)
+                        comparison_info = is_same(get_crop(frame, resized_masks, results, i), selected_object_crops, ic)
                         print("Comparison Info: "+str(comparison_info))
                         if comparison_info[0]:
                             candidates.add((id, comparison_info[1]))
@@ -252,6 +265,12 @@ while cap.isOpened():
         for key in current_xywh.keys():
             if not skip_xywh_update[key]:
                 prev_xywh[key] = current_xywh[key]
+        
+        if selected_id != None and selected_id in current_ids:
+            index = id_to_index[selected_id]
+            current_selected_object_crop = get_crop(frame, resized_masks, results, index)
+            selected_object_crops = addSOC(selected_object_crops, current_selected_object_crop)
+            selected_object_hidden = False
         
         selected_mask = get_selected_mask((mouseY, mouseX), resized_masks, results, frame)
         
