@@ -162,3 +162,6 @@ cython_debug/
 TapSelection/yolov8s-seg.pt
 TapSelection/yolov8x-seg.pt
 TapSelection/media
+TapSelection/Hand-occlusion-problem.mov
+TapSelection/XMem/saves/XMem.pth
+TapSelection/XMem/yolov8s-seg.pt
