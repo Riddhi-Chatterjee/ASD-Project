@@ -167,3 +167,4 @@ TapSelection/XMem/saves/XMem.pth
 TapSelection/XMem/yolov8s-seg.pt
 XMem_Results
 ReversedVisualGrounding/GIT-Prototype-SceneAndMask/output
+ReversedVisualGrounding/GIT-Prototype-SceneAndMask/ocid_data

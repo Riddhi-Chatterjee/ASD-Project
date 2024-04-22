@@ -28,6 +28,7 @@ from .layers.decoder import (TransformerDecoderTextualHead,
                              AutoRegressiveBeamSearch, GeneratorWithBeamSearch)
 from .layers.decoder import CaptioningModel
 from .process_image import load_image_by_pil
+from .process_image import load_mask_by_pil
 from .data_layer.transform import RenameKey, SelectTransform
 from .data_layer.transform import ImageTransform2Dict
 from .data_layer.transform import get_inception_train_transform
@@ -54,7 +55,7 @@ def get_data(scene_file, mask_file, prefix, target, tokenizer, image_transform):
     need_predict = [0] + need_predict + [1]
 
     scene = load_image_by_pil(scene_file)
-    mask = load_image_by_pil(mask_file)
+    mask = load_mask_by_pil(mask_file)
 
     data = {
         'caption_tokens': torch.tensor(input_ids),
@@ -241,6 +242,42 @@ def forward_backward_example(scene_files, mask_files, captions, prefixs=None):
 
     param = {}
     model = get_git_model(tokenizer, param)
+    model.train()
+    model.cuda()
+    loss_dict = model(data)
+    loss = sum(loss_dict.values())
+    loss.backward()
+    logging.info(loss)
+    
+def forward_backward(model, scene_files, mask_files, captions, prefixs=None):
+    # To be plugged into the trainer script...
+    if prefixs is None:
+        prefixs = [''] * len(captions)
+    cfg = {
+        'crop_region_extend_in_datatransform': 4,
+        'data_normalize': 'clip',
+        'train_crop_size': 224,
+        'input_small_scale': 0.8,
+        'no_color_jitter': True,
+        'no_flip': True,
+        'no_aspect_dist': True,
+        'interpolation': 'bicubic',
+        'min_size_range32': [160, 224], # in pretraining, it is multi-scale from 160 to 224; while for fine-tuning, it is single scale
+        'patch_size': 16,
+        'train_transform': 'vitp',
+    }
+    cfg = Config(cfg, {})
+    all_data = []
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+    image_transform = get_image_transform(cfg)
+    for scene_file, mask_file, prefix, target in zip(scene_files, mask_files, prefixs, captions):
+        data = get_data(scene_file, mask_file, prefix, target,
+                        tokenizer, image_transform)
+        all_data.append(data)
+    data = collate_fn(all_data)
+    logging.info(image_transform)
+    data = recursive_to_device(data, 'cuda')
+
     model.train()
     model.cuda()
     loss_dict = model(data)
